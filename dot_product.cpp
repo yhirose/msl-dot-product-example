@@ -16,14 +16,11 @@ using namespace ankerl::nanobench;
 
 void cpu_dot(const float* A, const float* B, float* OUT, size_t A_cols,
              size_t OUT_rows, size_t OUT_cols) {
-  auto rows = OUT_rows;
-  auto cols = OUT_cols;
-  auto m = A_cols;
 
-  for (size_t row = 0; row < rows; row++) {
-    for (size_t col = 0; col < cols; col++) {
+  for (size_t row = 0; row < OUT_rows; row++) {
+    for (size_t col = 0; col < OUT_cols; col++) {
       float val = 0.0;
-      for (size_t i = 0; i < m; i++) {
+      for (size_t i = 0; i < A_cols; i++) {
         val += A[A_cols * row + i] * B[OUT_cols * i + col];
       }
       OUT[OUT_cols * row + col] = val;
@@ -54,7 +51,7 @@ class metal {
         device const void* B_bytes,
         device void*       OUT_bytes,
         constant uint32_t& A_cols,
-        constant uint32_t& OUT_raws,
+        constant uint32_t& OUT_rows,
         constant uint32_t& OUT_cols,
         uint2              gid [[thread_position_in_grid]])
       {
@@ -105,7 +102,10 @@ class metal {
 
     auto computeEncoder = commandBuffer->computeCommandEncoder();
 
+    // Set the `dot` pipeline state object
     computeEncoder->setComputePipelineState(pso_dot_.get());
+
+    // Set parameters
     computeEncoder->setBuffer(A.get(), 0, 0);
     computeEncoder->setBuffer(B.get(), 0, 1);
     computeEncoder->setBuffer(OUT.get(), 0, 2);
@@ -140,7 +140,7 @@ class metal {
 //-----------------------------------------------------------------------------
 
 int main(void) {
-  // Matrix size: A:{100, 1000} `dot` B:{1000, 100} = OUT:{1000, 100}
+  // Matrix size: A:[100 × 1000] `dot` B:[1000 × 100] = OUT:[1000 × 100]
   size_t A_rows = 1000;
   size_t A_cols = 1000;
   size_t A_size = A_rows * A_cols;
@@ -172,7 +172,7 @@ int main(void) {
     auto B = Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic>(B_rows, B_cols);
     auto O = Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic>();
 
-    Bench().minEpochIterations(10).run("SIMD", [&] {
+    Bench().minEpochIterations(10).run("SIMD w/ Eigen", [&] {
 
       O = A * B;
 
